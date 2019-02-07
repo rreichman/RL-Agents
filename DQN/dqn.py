@@ -4,6 +4,7 @@ import tensorflow as tf
 import os
 import sys
 import numpy as np
+import random
 from collections import deque
 
 current_directory = sys.path[0]
@@ -75,6 +76,7 @@ class DqnAgent(object):
                 self.dl_model.session.run(self.dl_model.train_function, feed_dict=model_feed_dict)
             
             self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_decay * self.dqn_parameters.epsilon, self.dqn_parameters.epsilon_min)
+            #print(self.dqn_parameters.epsilon)
 
 # The NN model that is used in the DQN
 class DqnDlModel(object):
@@ -104,5 +106,6 @@ if __name__ == '__main__':
     dqn_parameters = DqnParameters()
     dqn_dl_model = DqnDlModel(gym_tester.env.observation_space.shape[0], gym_tester.env.action_space.n)
     agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space, dqn_dl_model, dqn_parameters)
+    #agent = RandomAgent(gym_tester.env.action_space)
     gym_tester.run(agent, 10000)
     dqn_dl_model.session.close()
