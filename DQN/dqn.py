@@ -3,6 +3,7 @@
 import tensorflow as tf
 import os
 import sys
+import numpy as np
 
 current_directory = sys.path[0]
 parent_directory = os.path.dirname(current_directory)
@@ -21,7 +22,7 @@ class Transition(object):
 
 class DqnParameters(object):
     def __init__(self, epsilon=0.01, replay_memory_capacity = 10000):
-        # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time (TODO:)
+        # The epsilon in the ϵ-greedy policy which allows for exploration. Can change in real time. Is 0-100
         self.epsilon = epsilon
         # The maximum number of members in the replay memory
         self.replay_memory_capacity = replay_memory_capacity
@@ -40,9 +41,17 @@ class DqnAgent(object):
         self.dqn_parameters = dqn_parameters
         self.replay_memory = ExperienceReplayMemory(self.dqn_parameters.replay_memory_capacity)
 
+    # Operates the agent in the environment
     def act(self, observation, reward, done):
-        # TODO: implement here
-        return self.action_space.sample()
+        # Random action in case the epsilon probability of random was chosen
+        action = self.action_space.sample()
+        
+        if np.random.rand() >= self.dqn_parameters.epsilon:
+            tf_action_result = self.dl_model.session.run(
+                self.dl_model.output_layer, {self.dl_model.input_layer : observation.reshape(1, len(observation))})
+            action = np.argmax(tf_action_result[0])
+        
+        return action
 
 # tf.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -53,6 +62,11 @@ class DqnDlModel(object):
         self.first_hidden_layer = tf.layers.dense(inputs=self.input_layer, units=24, activation=tf.nn.relu)
         self.second_hidden_layer = tf.layers.dense(inputs=self.first_hidden_layer, units=24, activation=tf.nn.relu)
         self.output_layer = tf.layers.dense(inputs=self.second_hidden_layer, units=action_size)
+        
+        self.init = tf.global_variables_initializer()
+
+        self.session = tf.Session()
+        self.session.run(self.init)
 
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v0')
@@ -60,3 +74,4 @@ if __name__ == '__main__':
     dqn_dl_model = DqnDlModel(gym_tester.env.observation_space.shape[0], gym_tester.env.action_space.n)
     agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space, dqn_dl_model, dqn_parameters)
     gym_tester.run(agent, 100)
+    dqn_dl_model.session.close()

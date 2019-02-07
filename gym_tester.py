@@ -1,6 +1,10 @@
 # Play around with OpenAI Gym
 
 import gym
+import os
+
+# Used to avoid warning "Your CPU supports instructions that this TensorFlow binary was not compiled to use"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from time import sleep
 
@@ -20,22 +24,25 @@ class GymTester(object):
         self.env.seed(0)
 
     def run(self, agent, episode_count):
-        ob = self.env.reset()
+        #ob = self.env.reset()
 
         reward = 0
         done = False
 
         for i in range(episode_count):
+            ob = self.env.reset()
             self.env.render()
+            total_reward = 0
             while True:
                 action = agent.act(ob, reward, done)
                 ob, reward, done, _ = self.env.step(action)
+                total_reward += reward
                 if done:
+                    print("Episode " + str(i) + ". Reward: " + str(total_reward))
                     break
-            print("Episode " + str(i) + ". Reward: " + str(reward))
 
 
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v0')
     agent = RandomAgent(gym_tester.env.action_space)
-    gym_tester.run(agent, 100)
+    gym_tester.run(agent, 30)
