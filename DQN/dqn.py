@@ -10,7 +10,6 @@ current_directory = sys.path[0]
 parent_directory = os.path.dirname(current_directory)
 sys.path.append(parent_directory)
 
-from ExperienceReplayMemory import *
 from gym_tester import *
 
 # The various parameters of the DQN process
