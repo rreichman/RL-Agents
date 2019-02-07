@@ -12,10 +12,12 @@ parent_directory = os.path.dirname(current_directory)
 sys.path.append(parent_directory)
 
 from gym_tester import *
+from utils import *
 
+# TODO: move this to a file of its own
 # The various parameters of the DQN process
 class DqnParameters(object):
-    def __init__(self, epsilon=1, epsilon_decay=0.995, epsilon_min=0.01, replay_memory_capacity = 100000, gamma=0.95, replay_memory_minibatch_size=20):
+    def __init__(self, epsilon=1, epsilon_decay=0.9999, epsilon_min=0.01, replay_memory_capacity = 1000000, gamma=0.99, replay_memory_minibatch_size=32):
         # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time. Is 0-1
         self.epsilon = epsilon
         # The decline in epsilon in each step
@@ -35,13 +37,25 @@ class DqnAgent(object):
     # action_space is the possible actions for the agent.
     # dl_model is the deep learning model that will learn the Q function. Differs a bit according to the observation space.
     # dqn_parameters are the hyperparameters used by the DQN algorithm
-    def __init__(self, observation_space, action_space, dl_model, dqn_parameters):
+    def __init__(self, observation_space, action_space):
         print("Starting DQN Agent")
         self.observation_space = observation_space
         self.action_space = action_space
-        self.dl_model = dl_model
-        self.dqn_parameters = dqn_parameters
+        self.dl_model = self.get_new_model(observation_space, action_space)
+        self.target_dl_model = self.get_new_model(observation_space, action_space)
+        self.target_dl_model_two = self.get_new_model(observation_space, action_space)
+
+        one_variables = self.dl_model.session.run(self.dl_model.variables)
+        two_variables = self.target_dl_model.session.run(self.target_dl_model.variables)
+        three_variables = self.target_dl_model_two.session.run(self.target_dl_model_two.variables)
+        
+        copy_weights_from_one_nn_to_other(self.dl_model, self.target_dl_model)
+        
+        self.dqn_parameters = DqnParameters()
         self.experience_replay_memory = deque()
+
+    def get_new_model(self, observation_space, action_space):
+        return DqnDlModel(observation_space.shape[0], action_space.n)
 
     def predict(self, observation):
         return self.dl_model.session.run(
@@ -75,12 +89,17 @@ class DqnAgent(object):
                 model_feed_dict = {self.dl_model.input_layer: state_reshaped, self.dl_model.output_res: q_values}
                 self.dl_model.session.run(self.dl_model.train_function, feed_dict=model_feed_dict)
             
+            # TODO: make this anneal linearly and not exponentially.
             self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_decay * self.dqn_parameters.epsilon, self.dqn_parameters.epsilon_min)
-            #print(self.dqn_parameters.epsilon)
 
+    def close_sessions(self):
+        self.dl_model.session.close()
+        self.target_dl_model.session.close()
+
+# TODO: move this to a file of its own.
 # The NN model that is used in the DQN
 class DqnDlModel(object):
-    def __init__(self, environment_input_size, action_size, learning_rate=0.001):
+    def __init__(self, environment_input_size, action_size, learning_rate=0.00025):
         self.learning_rate = learning_rate
 
         # TODO:: later change this to add the target network
@@ -91,21 +110,21 @@ class DqnDlModel(object):
 
         self.output_res = tf.placeholder(tf.float32, [None, action_size])
 
-        # TODO: This is mse, use huber loss instead because it's considered more stable.
-        self.error = tf.square(self.output_res - self.output_layer)
-        # Using Adam because it's considered effective.
-        self.train_function = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.error)
+        self.error = get_huber_loss(self.output_res, self.output_layer)
+        self.train_function = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, momentum=0.95).minimize(self.error)
 
         self.init = tf.global_variables_initializer()
+
+        self.variables = tf.trainable_variables()
 
         self.session = tf.Session()
         self.session.run(self.init)
 
+# TODO: perhaps clip changes to increase stability
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v0')
-    dqn_parameters = DqnParameters()
-    dqn_dl_model = DqnDlModel(gym_tester.env.observation_space.shape[0], gym_tester.env.action_space.n)
-    agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space, dqn_dl_model, dqn_parameters)
+
+    agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space)
     #agent = RandomAgent(gym_tester.env.action_space)
     gym_tester.run(agent, 10000)
-    dqn_dl_model.session.close()
+    agent.close_sessions()

@@ -41,21 +41,20 @@ class GymTester(object):
                 state = observation
                 state_next, reward, done, _ = self.env.step(action)
 
-                # TODO: Fix to use past four observations
+                # TODO: When using in Atari games should use past four observations
                 agent.get_feedback_from_action(state, action, reward, state_next, done)
                 total_reward += reward
                 if done:
                     recent_average += total_reward
-                    average_stat_frequency = 20
+                    average_stat_frequency = 10
                     if i % average_stat_frequency == 0 and i != 0:
                         print("i is " + str(i) + ". Recent average: " + str(recent_average * 1.0 / average_stat_frequency))
                         recent_average = 0
-
-                    #print("Episode " + str(i) + ". Reward: " + str(total_reward))
+                        #print("Epsilon is: " + str(agent.dqn_parameters.epsilon))
                     break
 
 
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v0')
     agent = RandomAgent(gym_tester.env.action_space)
-    gym_tester.run(agent, 30)
+    gym_tester.run(agent, 500)
