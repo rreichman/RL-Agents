@@ -17,6 +17,9 @@ class RandomAgent(object):
     def act(self, observation, reward, done):
         return self.action_space.sample()
 
+    def get_feedback_from_action(self, state, action, reward, state_next, done):
+        pass
+
 class GymTester(object):
     def __init__(self, environment_type):
         self.environment_type = environment_type
@@ -24,21 +27,31 @@ class GymTester(object):
         self.env.seed(0)
 
     def run(self, agent, episode_count):
-        #ob = self.env.reset()
-
         reward = 0
         done = False
 
+        recent_average = 0
+
         for i in range(episode_count):
-            ob = self.env.reset()
-            self.env.render()
+            observation = self.env.reset()
+            #self.env.render()
             total_reward = 0
             while True:
-                action = agent.act(ob, reward, done)
-                ob, reward, done, _ = self.env.step(action)
+                action = agent.act(observation, reward, done)
+                state = observation
+                state_next, reward, done, _ = self.env.step(action)
+
+                # TODO: Fix to use past four observations
+                agent.get_feedback_from_action(state, action, reward, state_next, done)
                 total_reward += reward
                 if done:
-                    print("Episode " + str(i) + ". Reward: " + str(total_reward))
+                    recent_average += total_reward
+                    average_stat_frequency = 20
+                    if i % average_stat_frequency == 0 and i != 0:
+                        print("i is " + str(i) + ". Recent average: " + str(recent_average * 1.0 / average_stat_frequency))
+                        recent_average = 0
+
+                    #print("Episode " + str(i) + ". Reward: " + str(total_reward))
                     break
 
 
