@@ -44,10 +44,6 @@ class DqnAgent(object):
         self.dl_model = self.get_new_model(observation_space, action_space)
         self.target_dl_model = self.get_new_model(observation_space, action_space)
         self.target_dl_model_two = self.get_new_model(observation_space, action_space)
-
-        one_variables = self.dl_model.session.run(self.dl_model.variables)
-        two_variables = self.target_dl_model.session.run(self.target_dl_model.variables)
-        three_variables = self.target_dl_model_two.session.run(self.target_dl_model_two.variables)
         
         copy_weights_from_one_nn_to_other(self.dl_model, self.target_dl_model)
         
@@ -102,22 +98,26 @@ class DqnDlModel(object):
     def __init__(self, environment_input_size, action_size, learning_rate=0.00025):
         self.learning_rate = learning_rate
 
-        # TODO:: later change this to add the target network
-        self.input_layer = tf.placeholder(tf.float32, [None, environment_input_size])
-        self.first_hidden_layer = tf.layers.dense(inputs=self.input_layer, units=24, activation=tf.nn.relu)
-        self.second_hidden_layer = tf.layers.dense(inputs=self.first_hidden_layer, units=24, activation=tf.nn.relu)
-        self.output_layer = tf.layers.dense(inputs=self.second_hidden_layer, units=action_size)
+        g = tf.Graph()
+        with g.as_default() as g:
+            with g.name_scope("name_scope") as g_scope:
+                self.input_layer = tf.placeholder(tf.float32, [None, environment_input_size])
+                self.first_hidden_layer = tf.layers.dense(inputs=self.input_layer, units=24, activation=tf.nn.relu)
+                self.second_hidden_layer = tf.layers.dense(inputs=self.first_hidden_layer, units=24, activation=tf.nn.relu)
+                self.output_layer = tf.layers.dense(inputs=self.second_hidden_layer, units=action_size)
 
-        self.output_res = tf.placeholder(tf.float32, [None, action_size])
+                self.output_res = tf.placeholder(tf.float32, [None, action_size])
 
-        self.error = get_huber_loss(self.output_res, self.output_layer)
-        self.train_function = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, momentum=0.95).minimize(self.error)
+                self.error = get_huber_loss(self.output_res, self.output_layer)
+                self.train_function = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, momentum=0.95).minimize(self.error)
 
-        self.init = tf.global_variables_initializer()
+                self.init = tf.global_variables_initializer()
 
-        self.variables = tf.trainable_variables()
+                self.variables = tf.trainable_variables()
 
-        self.session = tf.Session()
+        tf.reset_default_graph()
+
+        self.session = tf.Session(graph=g)
         self.session.run(self.init)
 
 # TODO: perhaps clip changes to increase stability
