@@ -1,7 +1,6 @@
 # Full DQN agent for RL tasks
 
 import tensorflow as tf
-
 import os
 import sys
 
@@ -9,6 +8,7 @@ current_directory = sys.path[0]
 parent_directory = os.path.dirname(current_directory)
 sys.path.append(parent_directory)
 
+from ExperienceReplayMemory import *
 from gym_tester import *
 
 # TODO: Make sure I actually need this and not just use array instead.
@@ -23,33 +23,40 @@ class DqnParameters(object):
     def __init__(self, epsilon=0.01, replay_memory_capacity = 10000):
         # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time (TODO:)
         self.epsilon = epsilon
+        # The maximum number of members in the replay memory
         self.replay_memory_capacity = replay_memory_capacity
 
 # An agent that operates in a general environment using the DQN algorithm
 class DqnAgent(object):
-
     # observation_space is what the agent sees from the environment.
     # action_space is the possible actions for the agent.
     # dl_model is the deep learning model that will learn the Q function. Differs a bit according to the observation space.
+    # dqn_parameters are the hyperparameters used by the DQN algorithm
     def __init__(self, observation_space, action_space, dl_model, dqn_parameters):
         print("Starting DQN Agent")
         self.observation_space = observation_space
         self.action_space = action_space
         self.dl_model = dl_model
         self.dqn_parameters = dqn_parameters
-        self.replay_memory = []
+        self.replay_memory = ExperienceReplayMemory(self.dqn_parameters.replay_memory_capacity)
 
     def act(self, observation, reward, done):
         # TODO: implement here
         return self.action_space.sample()
 
+# tf.train.AdamOptimizer(learning_rate=learning_rate)
+
 class DqnDlModel(object):
-    def __init__(self):
-        print("TODO:: implement")
+    def __init__(self, environment_input_size, action_size):
+        # TODO:: later change this to add the target network
+        self.input_layer = tf.placeholder(tf.float32, [None, environment_input_size])
+        self.first_hidden_layer = tf.layers.dense(inputs=self.input_layer, units=24, activation=tf.nn.relu)
+        self.second_hidden_layer = tf.layers.dense(inputs=self.first_hidden_layer, units=24, activation=tf.nn.relu)
+        self.output_layer = tf.layers.dense(inputs=self.second_hidden_layer, units=action_size)
 
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v0')
     dqn_parameters = DqnParameters()
-    dqn_dl_model = DqnDlModel()
+    dqn_dl_model = DqnDlModel(gym_tester.env.observation_space.shape[0], gym_tester.env.action_space.n)
     agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space, dqn_dl_model, dqn_parameters)
     gym_tester.run(agent, 100)
