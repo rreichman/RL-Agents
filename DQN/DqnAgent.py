@@ -17,11 +17,15 @@ from utils import *
 # TODO: move this to a file of its own
 # The various parameters of the DQN process
 class DqnParameters(object):
-    def __init__(self, epsilon=1, epsilon_decay=0.9999, epsilon_min=0.01, replay_memory_capacity = 1000000, gamma=0.99, replay_memory_minibatch_size=32):
+    def __init__(
+        self, epsilon_start=1, epsilon_min=0.01, steps_until_epsilon_min = 1000000, replay_memory_capacity = 1000000, 
+        gamma=0.99, replay_memory_minibatch_size=32, frequency_of_target_network_syncs=10000):
         # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time. Is 0-1
-        self.epsilon = epsilon
-        # The decline in epsilon in each step
-        self.epsilon_decay = epsilon_decay
+        self.epsilon_start = epsilon_start
+        self.epsilon = epsilon_start
+        # The number of steps until epsilon reaches zero
+        self.steps_until_epsilon_min = steps_until_epsilon_min
+        self.epsilon_step_size = (epsilon_start - epsilon_min) / steps_until_epsilon_min
         # The minimum exploration in the ϵ-greedy policy
         self.epsilon_min = epsilon_min
         # The maximum number of members in the replay memory
@@ -30,22 +34,26 @@ class DqnParameters(object):
         self.replay_memory_minibatch_size = replay_memory_minibatch_size
         # The discount factor for future events
         self.gamma = gamma
+        # The number of q-function model parameter udpates between each target network update.
+        self.frequency_of_target_network_syncs = frequency_of_target_network_syncs
 
 # An agent that operates in a general environment using the DQN algorithm
 class DqnAgent(object):
     # observation_space is what the agent sees from the environment.
     # action_space is the possible actions for the agent.
-    # dl_model is the deep learning model that will learn the Q function. Differs a bit according to the observation space.
-    # dqn_parameters are the hyperparameters used by the DQN algorithm
+    # model is the deep learning model that will learn the Q function. Differs a bit according to the input from the 
+    #   observation space.
+    # target_model is the target network described in the DQN algorithm.
     def __init__(self, observation_space, action_space):
         print("Starting DQN Agent")
         self.observation_space = observation_space
         self.action_space = action_space
-        self.dl_model = self.get_new_model(observation_space, action_space)
-        self.target_dl_model = self.get_new_model(observation_space, action_space)
-        self.target_dl_model_two = self.get_new_model(observation_space, action_space)
+        self.model = self.get_new_model(observation_space, action_space)
+        self.target_model = self.get_new_model(observation_space, action_space)
+        self.model_updates_since_last_target_network_sync = 0
         
-        copy_weights_from_one_nn_to_other(self.dl_model, self.target_dl_model)
+        # Initialize both the target and the model network to be the same. They will sync every X steps.
+        copy_weights_from_one_nn_to_other(self.model, self.target_model)
         
         self.dqn_parameters = DqnParameters()
         self.experience_replay_memory = deque()
@@ -53,9 +61,9 @@ class DqnAgent(object):
     def get_new_model(self, observation_space, action_space):
         return DqnDlModel(observation_space.shape[0], action_space.n)
 
-    def predict(self, observation):
-        return self.dl_model.session.run(
-                self.dl_model.output_layer, {self.dl_model.input_layer : observation.reshape(1, len(observation))})
+    def predict(self, model, observation):
+        return model.session.run(
+                model.output_layer, {model.input_layer : observation.reshape(1, len(observation))})
 
     # Operates the agent in the environment
     def act(self, observation, reward, done):
@@ -63,10 +71,18 @@ class DqnAgent(object):
         action = self.action_space.sample()
         
         if np.random.rand() >= self.dqn_parameters.epsilon:
-            tf_action_result = self.predict(observation)
+            tf_action_result = self.predict(self.model, observation)
             action = np.argmax(tf_action_result[0])
         
         return action
+
+    # Increases the number of parameter updates by one. Then updates the target network if we've reached the threshold.
+    def sync_target_network_if_necessary(self):
+        self.model_updates_since_last_target_network_sync += 1
+        if self.model_updates_since_last_target_network_sync % self.dqn_parameters.frequency_of_target_network_syncs == 0:
+            print("Updated Target Network")
+            copy_weights_from_one_nn_to_other(self.model, self.target_model)
+            self.model_updates_since_last_target_network_sync = 0
 
     # Receives the result of the action from the environment and learns accordingly.
     def get_feedback_from_action(self, state, action, reward, state_next, done):
@@ -77,20 +93,21 @@ class DqnAgent(object):
             for state, action, reward, state_next, done in minibatch:
                 q_update = reward
                 if not done:
-                    q_update = reward + self.dqn_parameters.gamma * np.amax(self.predict(state_next)[0])
-                q_values = self.predict(state)
+                    q_update = reward + self.dqn_parameters.gamma * np.amax(self.predict(self.target_model, state_next)[0])
+                q_values = self.predict(self.target_model, state)
                 q_values[0][action] = q_update
                 
                 state_reshaped = state.reshape(1, len(state))
-                model_feed_dict = {self.dl_model.input_layer: state_reshaped, self.dl_model.output_res: q_values}
-                self.dl_model.session.run(self.dl_model.train_function, feed_dict=model_feed_dict)
+                model_feed_dict = {self.model.input_layer: state_reshaped, self.model.output_res: q_values}
+                self.model.session.run(self.model.train_function, feed_dict=model_feed_dict)
+                self.sync_target_network_if_necessary()
             
-            # TODO: make this anneal linearly and not exponentially.
-            self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_decay * self.dqn_parameters.epsilon, self.dqn_parameters.epsilon_min)
+            epsilon_after_step = self.dqn_parameters.epsilon - self.dqn_parameters.epsilon_step_size
+            self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_min, epsilon_after_step)
 
     def close_sessions(self):
-        self.dl_model.session.close()
-        self.target_dl_model.session.close()
+        self.model.session.close()
+        self.target_model.session.close()
 
 # TODO: move this to a file of its own.
 # The NN model that is used in the DQN
