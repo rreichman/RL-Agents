@@ -19,7 +19,9 @@ from utils import *
 class DqnParameters(object):
     def __init__(
         self, epsilon_start=1, epsilon_min=0.01, steps_until_epsilon_min = 1000000, replay_memory_capacity = 1000000, 
-        gamma=0.99, replay_memory_minibatch_size=32, frequency_of_target_network_syncs=10000):
+        gamma=0.99, replay_memory_minibatch_size=32, frequency_of_target_network_syncs=10000, learning_rate=0.00025):
+        # Optimizer learning rate
+        self.learning_rate = learning_rate
         # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time. Is 0-1
         self.epsilon_start = epsilon_start
         self.epsilon = epsilon_start
@@ -46,20 +48,21 @@ class DqnAgent(object):
     # target_model is the target network described in the DQN algorithm.
     def __init__(self, observation_space, action_space):
         print("Starting DQN Agent")
+        self.dqn_parameters = DqnParameters()
+
         self.observation_space = observation_space
         self.action_space = action_space
-        self.model = self.get_new_model(observation_space, action_space)
-        self.target_model = self.get_new_model(observation_space, action_space)
+        self.model = self.get_new_model(observation_space, action_space, self.dqn_parameters.learning_rate)
+        self.target_model = self.get_new_model(observation_space, action_space, self.dqn_parameters.learning_rate)
         self.model_updates_since_last_target_network_sync = 0
         
         # Initialize both the target and the model network to be the same. They will sync every X steps.
         copy_weights_from_one_nn_to_other(self.model, self.target_model)
         
-        self.dqn_parameters = DqnParameters()
         self.experience_replay_memory = deque()
 
-    def get_new_model(self, observation_space, action_space):
-        return DqnDlModel(observation_space.shape[0], action_space.n)
+    def get_new_model(self, observation_space, action_space, learning_rate):
+        return DqnDlModel(observation_space.shape[0], action_space.n, learning_rate)
 
     def predict(self, model, observation):
         return model.session.run(
@@ -112,9 +115,7 @@ class DqnAgent(object):
 # TODO: move this to a file of its own.
 # The NN model that is used in the DQN
 class DqnDlModel(object):
-    def __init__(self, environment_input_size, action_size, learning_rate=0.00025):
-        self.learning_rate = learning_rate
-
+    def __init__(self, environment_input_size, action_size, learning_rate):
         g = tf.Graph()
         with g.as_default() as g:
             with g.name_scope("name_scope") as g_scope:
@@ -126,7 +127,7 @@ class DqnDlModel(object):
                 self.output_res = tf.placeholder(tf.float32, [None, action_size])
 
                 self.error = get_huber_loss(self.output_res, self.output_layer)
-                self.train_function = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, momentum=0.95).minimize(self.error)
+                self.train_function = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=0.95, epsilon=0.01).minimize(self.error)
 
                 self.init = tf.global_variables_initializer()
 
