@@ -18,8 +18,8 @@ from utils import *
 # The various parameters of the DQN process
 class DqnParameters(object):
     def __init__(
-        self, epsilon_start=1, epsilon_min=0.01, steps_until_epsilon_min = 1000000, replay_memory_capacity = 1000000, 
-        gamma=0.99, replay_memory_minibatch_size=32, frequency_of_target_network_syncs=10000, learning_rate=0.00025):
+        self, epsilon_start=1, epsilon_min=0.01, steps_until_epsilon_min = 500, replay_memory_capacity = 1000000, 
+        gamma=0.95, replay_memory_minibatch_size=20, frequency_of_target_network_syncs=10000, learning_rate= 0.001):
         # Optimizer learning rate
         self.learning_rate = learning_rate
         # The epsilon in the ϵ-greedy policy which allows for exploration. Changes in real time. Is 0-1
@@ -59,22 +59,18 @@ class DqnAgent(object):
         # Initialize both the target and the model network to be the same. They will sync every X steps.
         copy_weights_from_one_nn_to_other(self.model, self.target_model)
         
-        self.experience_replay_memory = deque()
+        self.experience_replay_memory = deque(maxlen=self.dqn_parameters.replay_memory_capacity)
 
     def get_new_model(self, observation_space, action_space, learning_rate):
         return DqnDlModel(observation_space.shape[0], action_space.n, learning_rate)
 
-    def predict(self, model, observation):
-        return model.session.run(
-                model.output_layer, {model.input_layer : observation.reshape(1, len(observation))})
-
     # Operates the agent in the environment
-    def act(self, observation, reward, done):
+    def act(self, state, reward, done):
         # Random action in case the epsilon probability of random was chosen
         action = self.action_space.sample()
         
         if np.random.rand() >= self.dqn_parameters.epsilon:
-            tf_action_result = self.predict(self.model, observation)
+            tf_action_result = predict(self.model, state)
             action = np.argmax(tf_action_result[0])
         
         return action
@@ -87,26 +83,29 @@ class DqnAgent(object):
             copy_weights_from_one_nn_to_other(self.model, self.target_model)
             self.model_updates_since_last_target_network_sync = 0
 
-    # Receives the result of the action from the environment and learns accordingly.
-    def get_feedback_from_action(self, state, action, reward, state_next, done):
+    # Saves the recent action to experience replay
+    def save_to_experience_replay(self, state, action, reward, state_next, done):
         self.experience_replay_memory.append((state, action, reward, state_next, done))
 
+    def run_experience_replay(self):
         if len(self.experience_replay_memory) >= self.dqn_parameters.replay_memory_minibatch_size:
             minibatch = random.sample(self.experience_replay_memory, self.dqn_parameters.replay_memory_minibatch_size)
             for state, action, reward, state_next, done in minibatch:
+                # TODO: something is wrong here
                 q_update = reward
                 if not done:
-                    q_update = reward + self.dqn_parameters.gamma * np.amax(self.predict(self.target_model, state_next)[0])
-                q_values = self.predict(self.target_model, state)
+                    q_update = reward + self.dqn_parameters.gamma * np.amax(predict(self.model, state_next)[0])
+                q_values = predict(self.model, state)
                 q_values[0][action] = q_update
                 
-                state_reshaped = state.reshape(1, len(state))
-                model_feed_dict = {self.model.input_layer: state_reshaped, self.model.output_res: q_values}
-                self.model.session.run(self.model.train_function, feed_dict=model_feed_dict)
+                model_feed_dict = {self.model.input_layer: state, self.model.output_res: q_values}
+                self.model.fit(model_feed_dict)
                 self.sync_target_network_if_necessary()
             
-            epsilon_after_step = self.dqn_parameters.epsilon - self.dqn_parameters.epsilon_step_size
-            self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_min, epsilon_after_step)
+        #epsilon_after_step = self.dqn_parameters.epsilon - self.dqn_parameters.epsilon_step_size
+        #self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_min, epsilon_after_step)
+        # TODO: fix this
+        self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_min, self.dqn_parameters.epsilon * 0.995)
 
     def close_sessions(self):
         self.model.session.close()
@@ -127,7 +126,10 @@ class DqnDlModel(object):
                 self.output_res = tf.placeholder(tf.float32, [None, action_size])
 
                 self.error = get_huber_loss(self.output_res, self.output_layer)
-                self.train_function = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=0.95, epsilon=0.01).minimize(self.error)
+                # Prefering Adam over RMSProp because OpenAI give good learning rate for the CartPole problem. It's also
+                # a good optimizer in general.
+                self.train_function = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.error)
+                #self.train_function = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=0.95, epsilon=0.01).minimize(self.error)
 
                 self.init = tf.global_variables_initializer()
 
@@ -138,11 +140,14 @@ class DqnDlModel(object):
         self.session = tf.Session(graph=g)
         self.session.run(self.init)
 
+    def fit(self, model_feed_dict):
+        self.session.run(self.train_function, feed_dict=model_feed_dict)
+
 # TODO: perhaps clip changes to increase stability
 if __name__ == '__main__':
-    gym_tester = GymTester('CartPole-v0')
+    gym_tester = GymTester('CartPole-v1')
 
     agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space)
     #agent = RandomAgent(gym_tester.env.action_space)
-    gym_tester.run(agent, 10000)
+    gym_tester.run(agent, 1000)
     agent.close_sessions()
