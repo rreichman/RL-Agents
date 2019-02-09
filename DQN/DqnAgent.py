@@ -51,11 +51,11 @@ class DqnAgent(object):
         self.observation_space = observation_space
         self.action_space = action_space
         self.model = self.get_new_model(observation_space, action_space, self.dqn_parameters.learning_rate)
-        #self.target_model = self.get_new_model(observation_space, action_space, self.dqn_parameters.learning_rate)
-        #self.model_updates_since_last_target_network_sync = 0
+        self.target_model = self.get_new_model(observation_space, action_space, self.dqn_parameters.learning_rate)
+        self.model_updates_since_last_target_network_sync = 0
         
         # Initialize both the target and the model network to be the same. They will sync every X steps.
-        #copy_weights_from_one_nn_to_other(self.model, self.target_model)
+        copy_weights_from_one_nn_to_other(self.model, self.target_model)
         
         self.experience_replay_memory = deque(maxlen=self.dqn_parameters.replay_memory_capacity)
 
@@ -74,12 +74,12 @@ class DqnAgent(object):
         return action
 
     # Increases the number of parameter updates by one. Then updates the target network if we've reached the threshold.
-    '''def sync_target_network_if_necessary(self):
+    def sync_target_network_if_necessary(self):
         self.model_updates_since_last_target_network_sync += 1
         if self.model_updates_since_last_target_network_sync % self.dqn_parameters.frequency_of_target_network_syncs == 0:
             print("Updated Target Network")
             copy_weights_from_one_nn_to_other(self.model, self.target_model)
-            self.model_updates_since_last_target_network_sync = 0'''
+            self.model_updates_since_last_target_network_sync = 0
 
     # Saves the recent action to experience replay
     def save_to_experience_replay(self, state, action, reward, state_next, done):
@@ -91,8 +91,8 @@ class DqnAgent(object):
             for state, action, reward, state_next, done in minibatch:
                 q_update = reward
                 if not done:
-                    q_update = reward + self.dqn_parameters.gamma * np.amax(predict(self.model, state_next)[0])
-                q_values = predict(self.model, state)
+                    q_update = reward + self.dqn_parameters.gamma * np.amax(predict(self.target_model, state_next)[0])
+                q_values = predict(self.target_model, state)
                 q_values[0][action] = q_update
                 
                 model_feed_dict = {self.model.input_layer: state, self.model.output_res: q_values}
@@ -106,7 +106,7 @@ class DqnAgent(object):
 
     def close_sessions(self):
         self.model.session.close()
-        #self.target_model.session.close()
+        self.target_model.session.close()
 
 # The NN model that is used in the DQN
 class DqnDlModel(object):
