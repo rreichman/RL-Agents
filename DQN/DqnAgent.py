@@ -91,13 +91,13 @@ class DqnAgent(object):
             for state, action, reward, state_next, done in minibatch:
                 q_update = reward
                 if not done:
-                    q_update = reward + self.dqn_parameters.gamma * np.amax(predict(self.target_model, state_next)[0])
-                q_values = predict(self.target_model, state)
+                    q_update = reward + self.dqn_parameters.gamma * np.amax(predict(self.model, state_next)[0])
+                q_values = predict(self.model, state)
                 q_values[0][action] = q_update
                 
                 model_feed_dict = {self.model.input_layer: state, self.model.output_res: q_values}
                 self.model.fit(model_feed_dict)
-                #self.sync_target_network_if_necessary()
+                self.sync_target_network_if_necessary()
             
         epsilon_after_step = self.dqn_parameters.epsilon - self.dqn_parameters.epsilon_step_size
         self.dqn_parameters.epsilon = max(self.dqn_parameters.epsilon_min, epsilon_after_step)
