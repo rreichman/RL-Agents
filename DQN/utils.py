@@ -20,11 +20,12 @@ def predict(model, observation):
 
 # Huber loss uses MSE (mean squared error) for low absolute values (<=1 in this case), and MAE (mean absolute error) for
 # high absolute values (>1 in this case)
+# NOTE: Currently using SME because Huber doesn't seem to work great in CartPole.
 def get_huber_loss(a, b):
     error = a - b
     
     # These need to be used specifically to accommodate TensorFlow
-    quadratic_term = error*error / 2
+    quadratic_term = error * error / 2
     return quadratic_term
     #linear_term = abs(error) - 1/2
     #use_linear_term = tf.cast(abs(error) > 1.0, tf.float32)

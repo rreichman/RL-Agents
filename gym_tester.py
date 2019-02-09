@@ -26,7 +26,7 @@ class GymTester(object):
         self.environment_type = environment_type
         self.env = gym.make(self.environment_type)
 
-    def run(self, agent, episode_count):
+    def run_dqn(self, agent, episode_count):
         observation_space_size = self.env.observation_space.shape[0]
         dqn_agent = agent
 
@@ -53,7 +53,10 @@ class GymTester(object):
 
                 dqn_agent.run_experience_replay()
 
+    def run_a3c(self, agent):
+        print("TODO:")
+
 if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v1')
     agent = RandomAgent(gym_tester.env.action_space)
-    gym_tester.run(agent, 500)
+    gym_tester.run_dqn(agent, 500)

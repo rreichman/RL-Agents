@@ -144,5 +144,5 @@ if __name__ == '__main__':
     gym_tester = GymTester('CartPole-v1')
 
     agent = DqnAgent(gym_tester.env.observation_space, gym_tester.env.action_space)
-    gym_tester.run(agent, 1000)
+    gym_tester.run_dqn(agent, 1000)
     agent.close_sessions()
